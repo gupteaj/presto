@@ -34,6 +34,8 @@ public final class SqlTimestamp
     private static final long MICROS_PER_SECOND = 1_000_000;
     private static final long NANOS_PER_MICROS = 1_000;
 
+    public static final int MICROSECONDS_PER_MILLISECOND = 1_000;
+
     // This needs to be Locale-independent, Java Time's DateTimeFormatter compatible and should never change, as it defines the external API data format.
     private static final String JSON_MILLIS_FORMAT = "uuuu-MM-dd HH:mm:ss.SSS";
     public static final DateTimeFormatter JSON_MILLIS_FORMATTER = DateTimeFormatter.ofPattern(JSON_MILLIS_FORMAT);

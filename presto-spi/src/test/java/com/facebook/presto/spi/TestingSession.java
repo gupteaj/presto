@@ -26,6 +26,7 @@ import java.util.Optional;
 import java.util.Set;
 
 import static com.facebook.presto.common.type.TimeZoneKey.UTC_KEY;
+import com.facebook.presto.common.type.TimeZoneKey;
 import static com.facebook.presto.spi.StandardErrorCode.INVALID_SESSION_PROPERTY;
 import static java.util.Locale.ENGLISH;
 
@@ -49,6 +50,12 @@ public final class TestingSession
         public ConnectorIdentity getIdentity()
         {
             return new ConnectorIdentity("user", Optional.empty(), Optional.empty());
+        }
+
+        @Override
+        public TimeZoneKey getTimeZoneKey()
+        {
+            return UTC_KEY;
         }
 
         @Override
