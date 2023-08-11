@@ -72,6 +72,7 @@ import com.facebook.presto.sql.tree.PrincipalSpecification;
 import com.facebook.presto.sql.tree.Property;
 import com.facebook.presto.sql.tree.QualifiedName;
 import com.facebook.presto.sql.tree.Query;
+import com.facebook.presto.sql.tree.QueryPeriod;
 import com.facebook.presto.sql.tree.QuerySpecification;
 import com.facebook.presto.sql.tree.RefreshMaterializedView;
 import com.facebook.presto.sql.tree.Relation;
@@ -401,7 +402,17 @@ public final class SqlFormatter
         protected Void visitTable(Table node, Integer indent)
         {
             builder.append(formatName(node.getName()));
+            if (node.getQueryPeriod().isPresent()) {
+                builder.append(" " + node.getQueryPeriod().get().toString());
+            }
 
+            return null;
+        }
+
+        @Override
+        protected Void visitQueryPeriod(QueryPeriod node, Integer indent)
+        {
+            builder.append("FOR " + node.getRangeType().name() + " AS OF " + formatExpression(node.getEnd().get(), parameters));
             return null;
         }
 

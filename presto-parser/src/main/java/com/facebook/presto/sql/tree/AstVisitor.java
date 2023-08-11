@@ -815,4 +815,9 @@ public abstract class AstVisitor<R, C>
     {
         return visitNode(node, context);
     }
+
+    protected R visitQueryPeriod(QueryPeriod node, C context)
+    {
+        return visitNode(node, context);
+    }
 }

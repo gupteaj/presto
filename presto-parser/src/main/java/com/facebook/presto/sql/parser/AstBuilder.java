@@ -117,6 +117,7 @@ import com.facebook.presto.sql.tree.QualifiedName;
 import com.facebook.presto.sql.tree.QuantifiedComparisonExpression;
 import com.facebook.presto.sql.tree.Query;
 import com.facebook.presto.sql.tree.QueryBody;
+import com.facebook.presto.sql.tree.QueryPeriod;
 import com.facebook.presto.sql.tree.QuerySpecification;
 import com.facebook.presto.sql.tree.RefreshMaterializedView;
 import com.facebook.presto.sql.tree.Relation;
@@ -1296,6 +1297,9 @@ class AstBuilder
     @Override
     public Node visitTableName(SqlBaseParser.TableNameContext context)
     {
+        if (context.queryPeriod() != null) {
+            return new Table(getLocation(context), getQualifiedName(context.qualifiedName()), (QueryPeriod) visit(context.queryPeriod()));
+        }
         return new Table(getLocation(context), getQualifiedName(context.qualifiedName()));
     }
 
@@ -1980,6 +1984,14 @@ class AstBuilder
         return parameter;
     }
 
+    @Override
+    public Node visitQueryPeriod(SqlBaseParser.QueryPeriodContext context)
+    {
+        QueryPeriod.RangeType type = getRangeType((Token) context.rangeType().getChild(0).getPayload());
+        Expression marker = (Expression) visit(context.valueExpression());
+        return new QueryPeriod(getLocation(context), type, marker);
+    }
+
     // ***************** arguments *****************
 
     @Override
@@ -2590,5 +2602,16 @@ class AstBuilder
     private static ParsingException parseError(String message, ParserRuleContext context)
     {
         return new ParsingException(message, null, context.getStart().getLine(), context.getStart().getCharPositionInLine());
+    }
+
+    private static QueryPeriod.RangeType getRangeType(Token token)
+    {
+        switch (token.getType()) {
+            case SqlBaseLexer.TIMESTAMP:
+                return QueryPeriod.RangeType.TIMESTAMP;
+            case SqlBaseLexer.VERSION:
+                return QueryPeriod.RangeType.VERSION;
+        }
+        throw new IllegalArgumentException("Unsupported query period range type: " + token.getText());
     }
 }
