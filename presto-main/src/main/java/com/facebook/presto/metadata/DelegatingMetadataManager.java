@@ -105,6 +105,12 @@ public abstract class DelegatingMetadataManager
     }
 
     @Override
+    public Optional<TableHandle> getVersionTableHandle(Session session, QualifiedObjectName tableName, Optional<TableVersion> startVersion, Optional<TableVersion> endVersion)
+    {
+        return delegate.getVersionTableHandle(session, tableName, startVersion, endVersion);
+    }
+
+    @Override
     public TableLayoutResult getLayout(Session session, TableHandle tableHandle, Constraint<ColumnHandle> constraint, Optional<Set<ColumnHandle>> desiredColumns)
     {
         return delegate.getLayout(session, tableHandle, constraint, desiredColumns);

@@ -15,6 +15,8 @@ package com.facebook.presto.iceberg;
 
 import com.facebook.airlift.json.JsonCodec;
 import com.facebook.presto.common.predicate.TupleDomain;
+import com.facebook.presto.common.type.DateTimeEncoding;
+import com.facebook.presto.common.type.TimestampWithTimeZoneType;
 import com.facebook.presto.common.type.TypeManager;
 import com.facebook.presto.hive.HdfsContext;
 import com.facebook.presto.hive.HdfsEnvironment;
@@ -39,6 +41,7 @@ import com.facebook.presto.spi.SchemaNotFoundException;
 import com.facebook.presto.spi.SchemaTableName;
 import com.facebook.presto.spi.SystemTable;
 import com.facebook.presto.spi.TableNotFoundException;
+import com.facebook.presto.spi.connector.ConnectorTableVersion;
 import com.facebook.presto.spi.statistics.TableStatistics;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
@@ -57,6 +60,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 
+import static com.facebook.presto.common.type.BigintType.BIGINT;
 import static com.facebook.presto.hive.HiveMetadata.TABLE_COMMENT;
 import static com.facebook.presto.iceberg.IcebergSchemaProperties.getSchemaLocation;
 import static com.facebook.presto.iceberg.IcebergTableProperties.getFileFormat;
@@ -65,11 +69,13 @@ import static com.facebook.presto.iceberg.IcebergTableProperties.getPartitioning
 import static com.facebook.presto.iceberg.IcebergTableProperties.getTableLocation;
 import static com.facebook.presto.iceberg.IcebergUtil.getColumns;
 import static com.facebook.presto.iceberg.IcebergUtil.getHiveIcebergTable;
+import static com.facebook.presto.iceberg.IcebergUtil.getSnapshotIdAsOfTime;
 import static com.facebook.presto.iceberg.IcebergUtil.getTableComment;
 import static com.facebook.presto.iceberg.IcebergUtil.isIcebergTable;
 import static com.facebook.presto.iceberg.PartitionFields.parsePartitionFields;
 import static com.facebook.presto.iceberg.TableType.DATA;
 import static com.facebook.presto.iceberg.TypeConverter.toIcebergType;
+import static com.facebook.presto.spi.StandardErrorCode.INVALID_ARGUMENTS;
 import static com.facebook.presto.spi.StandardErrorCode.INVALID_SCHEMA_PROPERTY;
 import static com.facebook.presto.spi.StandardErrorCode.NOT_SUPPORTED;
 import static com.facebook.presto.spi.StandardErrorCode.SCHEMA_NOT_EMPTY;
@@ -114,6 +120,15 @@ public class IcebergHiveMetadata
     @Override
     public IcebergTableHandle getTableHandle(ConnectorSession session, SchemaTableName tableName)
     {
+        return getTableHandle(session, tableName, Optional.empty(), Optional.empty());
+    }
+
+    @Override
+    public IcebergTableHandle getTableHandle(ConnectorSession session, SchemaTableName tableName, Optional<ConnectorTableVersion> startVersion, Optional<ConnectorTableVersion> endVersion)
+    {
+        if (startVersion.isPresent()) {
+            throw new PrestoException(NOT_SUPPORTED, "Read table with start version is not supported");
+        }
         IcebergTableName name = IcebergTableName.from(tableName.getTableName());
         verify(name.getTableType() == DATA, "Wrong table type: " + name.getTableType());
 
@@ -127,7 +142,16 @@ public class IcebergHiveMetadata
         }
 
         org.apache.iceberg.Table table = getHiveIcebergTable(metastore, hdfsEnvironment, session, tableName);
-        Optional<Long> snapshotId = getSnapshotId(table, name.getSnapshotId());
+        Optional<Long> tableSnapshotId;
+
+        if (endVersion.isPresent()) {
+            long versionSnapshotId = getSnapshotIdFromVersion(table, endVersion.get());
+            tableSnapshotId = Optional.of(versionSnapshotId);
+        }
+        else {
+            tableSnapshotId = getSnapshotId(table, name.getSnapshotId());
+        }
+        Optional<Long> snapshotId = getSnapshotId(table, tableSnapshotId);
 
         return new IcebergTableHandle(
                 tableName.getSchemaName(),
@@ -137,6 +161,38 @@ public class IcebergHiveMetadata
                 TupleDomain.all());
     }
 
+    private static long getSnapshotIdFromVersion(org.apache.iceberg.Table table, ConnectorTableVersion version)
+    {
+        com.facebook.presto.common.type.Type versionType = version.getVersionType();
+        switch (version.getPointerType()) {
+            case TEMPORAL:
+                return getTemporalSnapshotIdFromVersion(table, version, versionType);
+            case TARGET_ID:
+                return getTargetSnapshotIdFromVersion(table, version, versionType);
+        }
+        throw new PrestoException(NOT_SUPPORTED, "Unsupported Pointer type for version table: " + version.getPointerType());
+    }
+
+    private static long getTargetSnapshotIdFromVersion(org.apache.iceberg.Table table, ConnectorTableVersion version, com.facebook.presto.common.type.Type versionType)
+    {
+        if (versionType != BIGINT) {
+            throw new PrestoException(NOT_SUPPORTED, "Unsupported type for table version: " + versionType.getDisplayName());
+        }
+        long snapshotId = (long) version.getVersion();
+        if (table.snapshot(snapshotId) == null) {
+            throw new PrestoException(INVALID_ARGUMENTS, "Iceberg snapshot ID does not exists: " + snapshotId);
+        }
+        return snapshotId;
+    }
+
+    private static long getTemporalSnapshotIdFromVersion(org.apache.iceberg.Table table, ConnectorTableVersion version, com.facebook.presto.common.type.Type versionType)
+    {
+        if (versionType instanceof TimestampWithTimeZoneType) {
+            long millisUtc = DateTimeEncoding.unpackMillisUtc((Long) version.getVersion());
+            return getSnapshotIdAsOfTime(table, millisUtc);
+        }
+        throw new PrestoException(NOT_SUPPORTED, "Unsupported type for temporal table version: " + versionType.getDisplayName());
+    }
     @Override
     public Optional<SystemTable> getSystemTable(ConnectorSession session, SchemaTableName tableName)
     {

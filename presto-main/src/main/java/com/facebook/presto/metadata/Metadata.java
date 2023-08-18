@@ -76,6 +76,16 @@ public interface Metadata
     Optional<TableHandle> getTableHandleForStatisticsCollection(Session session, QualifiedObjectName tableName, Map<String, Object> analyzeProperties);
 
     /**
+     * Returns a table handle for the specified table name with a specified version
+     */
+    Optional<TableHandle> getVersionTableHandle(Session session, QualifiedObjectName tableName, Optional<TableVersion> startVersion, Optional<TableVersion> endVersion);
+
+    /**
+     * Returns a table handle for the specified table name with a specified version
+     */
+    // Optional<TableHandle> getTableHandle(Session session, QualifiedObjectName tableName, Optional<TableVersion> startVersion, Optional<TableVersion> endVersion);
+
+    /**
      * Returns a new table layout that satisfies the given constraint together with unenforced constraint.
      */
     @Experimental

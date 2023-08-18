@@ -25,6 +25,7 @@ import com.facebook.presto.spi.PrestoException;
 import com.facebook.presto.spi.SchemaTableName;
 import com.facebook.presto.spi.TableHandle;
 import com.facebook.presto.spi.connector.ConnectorMetadata;
+import com.facebook.presto.spi.connector.ConnectorTableVersion;
 import com.facebook.presto.spi.security.PrestoPrincipal;
 import com.facebook.presto.sql.analyzer.SemanticException;
 import com.facebook.presto.sql.tree.GrantorSpecification;
@@ -166,8 +167,15 @@ public final class MetadataUtil
     {
         return transactionManager.getOptionalCatalogMetadata(session.getRequiredTransactionId(), catalogName);
     }
-
-    public static Optional<TableHandle> getOptionalTableHandle(Session session, TransactionManager transactionManager, QualifiedObjectName table)
+    public static Optional<ConnectorTableVersion> toConnectorVersion(Optional<TableVersion> version)
+    {
+        Optional<ConnectorTableVersion> connectorVersion = Optional.empty();
+        if (version.isPresent()) {
+            connectorVersion = Optional.of(new ConnectorTableVersion(version.get().getPointerType(), version.get().getObjectType(), version.get().getPointer()));
+        }
+        return connectorVersion;
+    }
+    public static Optional<TableHandle> getOptionalTableHandle(Session session, TransactionManager transactionManager, QualifiedObjectName table, Optional<TableVersion> startVersion, Optional<TableVersion> endVersion)
     {
         requireNonNull(table, "table is null");
 
@@ -177,14 +185,22 @@ public final class MetadataUtil
             ConnectorId connectorId = catalogMetadata.getConnectorId(session, table);
             ConnectorMetadata metadata = catalogMetadata.getMetadataFor(connectorId);
 
-            ConnectorTableHandle tableHandle = metadata.getTableHandle(session.toConnectorSession(connectorId), toSchemaTableName(table));
-            if (tableHandle != null) {
-                return Optional.of(new TableHandle(
-                        connectorId,
-                        tableHandle,
-                        catalogMetadata.getTransactionHandleFor(connectorId),
-                        Optional.empty()));
+            if (startVersion.isPresent() || endVersion.isPresent()) {
+                ConnectorTableHandle tableHandle = metadata.getTableHandle(session.toConnectorSession(connectorId), toSchemaTableName(table), toConnectorVersion(startVersion), toConnectorVersion(endVersion));
+                if (tableHandle != null) {
+                    return Optional.of(new TableHandle(
+                            connectorId,
+                            tableHandle,
+                            catalogMetadata.getTransactionHandleFor(connectorId),
+                            Optional.empty()));
+                }
             }
+            return Optional.ofNullable(metadata.getTableHandle(session.toConnectorSession(connectorId), toSchemaTableName(table)))
+                    .map(TableHandle -> new TableHandle(
+                            connectorId,
+                            TableHandle,
+                            catalogMetadata.getTransactionHandleFor(connectorId),
+                            Optional.empty()));
         }
         return Optional.empty();
     }

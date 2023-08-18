@@ -142,6 +142,11 @@ public abstract class AbstractMockMetadata
     {
         throw new UnsupportedOperationException();
     }
+    @Override
+    public Optional<TableHandle> getVersionTableHandle(Session session, QualifiedObjectName tableName, Optional<TableVersion> startVersion, Optional<TableVersion> endVersion)
+    {
+        throw new UnsupportedOperationException();
+    }
 
     @Override
     public Optional<SystemTable> getSystemTable(Session session, QualifiedObjectName tableName)

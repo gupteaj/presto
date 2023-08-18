@@ -87,6 +87,14 @@ public interface ConnectorMetadata
 
     /**
      * Returns a table handle for the specified table name, or null if the connector does not contain the table.
+     */
+    default ConnectorTableHandle getTableHandle(ConnectorSession session, SchemaTableName tableName, Optional<ConnectorTableVersion> startVersion, Optional<ConnectorTableVersion> endVersion)
+    {
+        throw new PrestoException(NOT_SUPPORTED, "This connector does not support versioned table");
+    }
+
+    /**
+     * Returns a table handle for the specified table name, or null if the connector does not contain the table.
      * The returned table handle can contain information in analyzeProperties.
      */
     default ConnectorTableHandle getTableHandleForStatisticsCollection(ConnectorSession session, SchemaTableName tableName, Map<String, Object> analyzeProperties)

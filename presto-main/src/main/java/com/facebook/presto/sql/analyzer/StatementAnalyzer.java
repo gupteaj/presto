@@ -22,13 +22,17 @@ import com.facebook.presto.common.function.OperatorType;
 import com.facebook.presto.common.predicate.Domain;
 import com.facebook.presto.common.predicate.TupleDomain;
 import com.facebook.presto.common.type.ArrayType;
+import com.facebook.presto.common.type.DateType;
 import com.facebook.presto.common.type.DoubleType;
 import com.facebook.presto.common.type.MapType;
 import com.facebook.presto.common.type.RealType;
 import com.facebook.presto.common.type.RowType;
+import com.facebook.presto.common.type.TimestampType;
+import com.facebook.presto.common.type.TimestampWithTimeZoneType;
 import com.facebook.presto.common.type.Type;
 import com.facebook.presto.metadata.Metadata;
 import com.facebook.presto.metadata.OperatorNotFoundException;
+import com.facebook.presto.metadata.TableVersion;
 import com.facebook.presto.spi.ColumnHandle;
 import com.facebook.presto.spi.ColumnMetadata;
 import com.facebook.presto.spi.ConnectorId;
@@ -42,6 +46,7 @@ import com.facebook.presto.spi.WarningCollector;
 import com.facebook.presto.spi.analyzer.AccessControlInfoForTable;
 import com.facebook.presto.spi.analyzer.MetadataResolver;
 import com.facebook.presto.spi.analyzer.ViewDefinition;
+import com.facebook.presto.spi.connector.PointerType;
 import com.facebook.presto.spi.function.FunctionKind;
 import com.facebook.presto.spi.function.Signature;
 import com.facebook.presto.spi.function.SqlFunction;
@@ -122,6 +127,7 @@ import com.facebook.presto.sql.tree.Property;
 import com.facebook.presto.sql.tree.QualifiedName;
 import com.facebook.presto.sql.tree.Query;
 import com.facebook.presto.sql.tree.QueryBody;
+import com.facebook.presto.sql.tree.QueryPeriod;
 import com.facebook.presto.sql.tree.QuerySpecification;
 import com.facebook.presto.sql.tree.RefreshMaterializedView;
 import com.facebook.presto.sql.tree.Relation;
@@ -192,6 +198,7 @@ import static com.facebook.presto.common.type.UnknownType.UNKNOWN;
 import static com.facebook.presto.common.type.VarcharType.VARCHAR;
 import static com.facebook.presto.metadata.MetadataUtil.createQualifiedObjectName;
 import static com.facebook.presto.metadata.MetadataUtil.toSchemaTableName;
+import static com.facebook.presto.spi.StandardErrorCode.INVALID_ARGUMENTS;
 import static com.facebook.presto.spi.StandardErrorCode.INVALID_FUNCTION_ARGUMENT;
 import static com.facebook.presto.spi.StandardErrorCode.NOT_FOUND;
 import static com.facebook.presto.spi.StandardWarningCode.PERFORMANCE_WARNING;
@@ -1280,7 +1287,8 @@ class StatementAnalyzer
             }
 
             TableColumnMetadata tableColumnsMetadata = getTableColumnsMetadata(session, metadataResolver, analysis.getMetadataHandle(), name);
-            Optional<TableHandle> tableHandle = tableColumnsMetadata.getTableHandle();
+            // Optional<TableHandle> tableHandle = tableColumnsMetadata.getTableHandle();
+            Optional<TableHandle> tableHandle = getTableHandle(tableColumnsMetadata, table, name, scope);
 
             Map<String, ColumnHandle> columnHandles = tableColumnsMetadata.getColumnHandles();
 
@@ -1302,7 +1310,6 @@ class StatementAnalyzer
                 checkArgument(columnHandle != null, "Unknown field %s", field);
                 analysis.setColumn(field, columnHandle);
             }
-
             analysis.registerTable(table, tableHandle.get());
 
             if (statement instanceof RefreshMaterializedView) {
@@ -1319,6 +1326,79 @@ class StatementAnalyzer
             }
 
             return createAndAssignScope(table, scope, fields.build());
+        }
+
+        /**
+         * Helper function that analyzes any versioning and returns the appropriate table handle.
+         *
+         */
+        private Optional<TableHandle> getTableHandle(TableColumnMetadata tableColumnsMetadata, Table table, QualifiedObjectName name, Optional<Scope> scope)
+        {
+            // Process time travel query period
+            if (table.getQueryPeriod().isPresent()) {
+                Optional<TableVersion> startVersion = extractTableVersion(table, name, table.getQueryPeriod().get().getStart(), scope);
+                Optional<TableVersion> endVersion = extractTableVersion(table, name, table.getQueryPeriod().get().getEnd(), scope);
+                return metadata.getVersionTableHandle(session, name, startVersion, endVersion);
+            }
+            else {
+                return tableColumnsMetadata.getTableHandle();
+            }
+        }
+
+        /**
+         * Analyzes the version pointer in a query period and extracts an evaluated version value
+         */
+        private Optional<TableVersion> extractTableVersion(Table table, QualifiedObjectName tableName, Optional<Expression> version, Optional<Scope> scope)
+        {
+            Optional<TableVersion> tableVersion = Optional.empty();
+            if (!version.isPresent()) {
+                return tableVersion;
+            }
+            ExpressionAnalysis expressionAnalysis = analyzeExpression(version.get(), scope.get());
+            analysis.recordSubqueries(table, expressionAnalysis);
+
+            // Once the range value is analyzed, we can evaluate it
+            Type versionType = expressionAnalysis.getType(version.get());
+            if (versionType == UNKNOWN) {
+                throw new PrestoException(INVALID_ARGUMENTS, format("Pointer value cannot be NULL for %s", table.getQueryPeriod().get()));
+            }
+            PointerType pointerType = toPointerType(table.getQueryPeriod().get().getRangeType());
+            Object evaluatedVersion = evaluateConstantExpression(version.get(), versionType, metadata, session, analysis.getParameters());
+            TableVersion extractedVersion = new TableVersion(pointerType, versionType, evaluatedVersion);
+            validateVersionPointer(table.getQueryPeriod().get(), extractedVersion);
+            return Optional.of(extractedVersion);
+        }
+        private void validateVersionPointer(QueryPeriod queryPeriod, TableVersion extractedVersion)
+        {
+            Type type = extractedVersion.getObjectType();
+            Object pointer = extractedVersion.getPointer();
+            if (pointer == null) {
+                throw new PrestoException(INVALID_ARGUMENTS, format("Pointer value cannot be NULL for %s", queryPeriod));
+            }
+            if (extractedVersion.getPointerType() == PointerType.TEMPORAL) {
+                // Before checking if the connector supports the version type, verify that version is a valid time-based type
+                if (!(type instanceof TimestampWithTimeZoneType ||
+                        type instanceof TimestampType ||
+                        type instanceof DateType)) {
+                    throw new SemanticException(TYPE_MISMATCH, queryPeriod,
+                            "Type %s invalid. Temporal pointers must be of type Timestamp, Timestamp with Time Zone, or Date.",
+                            type.getDisplayName());
+                }
+            }
+        }
+
+        private PointerType toPointerType(QueryPeriod.RangeType type)
+        {
+            PointerType pointerType = null;
+            switch (type) {
+                case TIMESTAMP:
+                    pointerType = PointerType.TEMPORAL;
+                    break;
+                case VERSION:
+                    pointerType = PointerType.TARGET_ID;
+                    break;
+            }
+            return pointerType;
         }
 
         private Scope getScopeFromTable(Table table, Optional<Scope> scope)
