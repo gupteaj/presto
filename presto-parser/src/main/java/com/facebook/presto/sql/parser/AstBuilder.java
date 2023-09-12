@@ -165,6 +165,7 @@ import com.facebook.presto.sql.tree.Table;
 import com.facebook.presto.sql.tree.TableElement;
 import com.facebook.presto.sql.tree.TableSubquery;
 import com.facebook.presto.sql.tree.TimeLiteral;
+import com.facebook.presto.sql.tree.TimeTravelExpression;
 import com.facebook.presto.sql.tree.TimestampLiteral;
 import com.facebook.presto.sql.tree.TransactionAccessMode;
 import com.facebook.presto.sql.tree.TransactionMode;
@@ -1296,6 +1297,9 @@ class AstBuilder
     @Override
     public Node visitTableName(SqlBaseParser.TableNameContext context)
     {
+        if (context.timeTravelExpression() != null) {
+            return new Table(getLocation(context), getQualifiedName(context.qualifiedName()), (TimeTravelExpression) visit(context.timeTravelExpression()));
+        }
         return new Table(getLocation(context), getQualifiedName(context.qualifiedName()));
     }
 
@@ -1454,6 +1458,20 @@ class AstBuilder
 
     // ************** value expressions **************
 
+    @Override
+    public Node visitTimeTravel(SqlBaseParser.TimeTravelContext context)
+    {
+        Expression child = (Expression) visit(context.valueExpression());
+
+        switch (context.timeTravelType.getType()) {
+            case SqlBaseLexer.TIMESTAMP:
+                return TimeTravelExpression.timestampExpr(getLocation(context), child);
+            case SqlBaseLexer.VERSION:
+                return TimeTravelExpression.versionExpr(getLocation(context), child);
+            default:
+                throw new UnsupportedOperationException("Unsupported Type: " + context.timeTravelType.getText());
+        }
+    }
     @Override
     public Node visitArithmeticUnary(SqlBaseParser.ArithmeticUnaryContext context)
     {

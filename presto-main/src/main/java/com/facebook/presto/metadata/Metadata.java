@@ -76,6 +76,10 @@ public interface Metadata
     Optional<TableHandle> getTableHandleForStatisticsCollection(Session session, QualifiedObjectName tableName, Map<String, Object> analyzeProperties);
 
     /**
+     * Returns a table handle for time travel expression
+     */
+    Optional<TableHandle> getTimeTravelHandle(Session session, QualifiedObjectName tableName, Optional<Type> timeTravelType, Optional<Object> timeTravelExpression);
+    /**
      * Returns a new table layout that satisfies the given constraint together with unenforced constraint.
      */
     @Experimental

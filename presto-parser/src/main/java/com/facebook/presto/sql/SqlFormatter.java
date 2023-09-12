@@ -107,6 +107,7 @@ import com.facebook.presto.sql.tree.SqlParameterDeclaration;
 import com.facebook.presto.sql.tree.StartTransaction;
 import com.facebook.presto.sql.tree.Table;
 import com.facebook.presto.sql.tree.TableSubquery;
+import com.facebook.presto.sql.tree.TimeTravelExpression;
 import com.facebook.presto.sql.tree.TransactionAccessMode;
 import com.facebook.presto.sql.tree.TransactionMode;
 import com.facebook.presto.sql.tree.TruncateTable;
@@ -401,7 +402,17 @@ public final class SqlFormatter
         protected Void visitTable(Table node, Integer indent)
         {
             builder.append(formatName(node.getName()));
+            if (node.getTimeTravelExpression().isPresent()) {
+                builder.append(" " + node.getTimeTravelExpression().get());
+            }
 
+            return null;
+        }
+
+        @Override
+        protected Void visitTimeTravel(TimeTravelExpression node, Integer indent)
+        {
+            builder.append("FOR " + node.getTimeTravelType().name() + " AS OF " + formatExpression(node.getAsOfExpr(), parameters));
             return null;
         }
 

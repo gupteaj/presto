@@ -38,6 +38,7 @@ import org.apache.iceberg.TableScan;
 import org.apache.iceberg.expressions.Expression;
 import org.apache.iceberg.io.LocationProvider;
 
+import java.time.Instant;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -48,6 +49,7 @@ import java.util.regex.Pattern;
 import static com.facebook.presto.hive.HiveMetadata.TABLE_COMMENT;
 import static com.facebook.presto.iceberg.IcebergErrorCode.ICEBERG_INVALID_SNAPSHOT_ID;
 import static com.facebook.presto.iceberg.util.IcebergPrestoModelConverters.toIcebergTableIdentifier;
+import static com.facebook.presto.spi.StandardErrorCode.INVALID_ARGUMENTS;
 import static com.facebook.presto.spi.StandardErrorCode.NOT_SUPPORTED;
 import static com.google.common.collect.ImmutableList.toImmutableList;
 import static com.google.common.collect.ImmutableMap.toImmutableMap;
@@ -57,6 +59,7 @@ import static com.google.common.collect.Streams.mapWithIndex;
 import static com.google.common.collect.Streams.stream;
 import static java.lang.Math.toIntExact;
 import static java.lang.String.format;
+import static java.util.Comparator.comparing;
 import static org.apache.iceberg.BaseMetastoreTableOperations.ICEBERG_TABLE_TYPE_VALUE;
 import static org.apache.iceberg.BaseMetastoreTableOperations.TABLE_TYPE_PROP;
 import static org.apache.iceberg.LocationProviders.locationsFor;
@@ -116,6 +119,15 @@ public final class IcebergUtil
             return name.getSnapshotId();
         }
         return Optional.ofNullable(table.currentSnapshot()).map(Snapshot::snapshotId);
+    }
+
+    public static long getSnapshotIdAsOfTime(Table table, long epochMillis)
+    {
+        return table.history().stream()
+                .filter(logEntry -> logEntry.timestampMillis() <= epochMillis)
+                .max(comparing(HistoryEntry::timestampMillis))
+                .orElseThrow(() -> new PrestoException(INVALID_ARGUMENTS, format("No version history table %s at or before %s", table.name(), Instant.ofEpochMilli(epochMillis))))
+                .snapshotId();
     }
 
     public static List<IcebergColumnHandle> getColumns(Schema schema, TypeManager typeManager)

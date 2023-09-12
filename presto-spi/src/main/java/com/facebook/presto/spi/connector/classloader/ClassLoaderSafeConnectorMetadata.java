@@ -230,6 +230,13 @@ public class ClassLoaderSafeConnectorMetadata
     }
 
     @Override
+    public ConnectorTableHandle getTableHandle(ConnectorSession session, SchemaTableName tableName, Optional<Type> timeTravelType, Optional<Object> timeTravelExpression)
+    {
+        try (ThreadContextClassLoader ignored = new ThreadContextClassLoader(classLoader)) {
+            return delegate.getTableHandle(session, tableName, timeTravelType, timeTravelExpression);
+        }
+    }
+    @Override
     public Optional<SystemTable> getSystemTable(ConnectorSession session, SchemaTableName tableName)
     {
         try (ThreadContextClassLoader ignored = new ThreadContextClassLoader(classLoader)) {

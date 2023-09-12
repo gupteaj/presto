@@ -105,6 +105,12 @@ public abstract class DelegatingMetadataManager
     }
 
     @Override
+    public Optional<TableHandle> getTimeTravelHandle(Session session, QualifiedObjectName tableName, Optional<Type> timeTravelType, Optional<Object> timeTravelExpression)
+    {
+        return delegate.getTimeTravelHandle(session, tableName, timeTravelType, timeTravelExpression);
+    }
+
+    @Override
     public TableLayoutResult getLayout(Session session, TableHandle tableHandle, Constraint<ColumnHandle> constraint, Optional<Set<ColumnHandle>> desiredColumns)
     {
         return delegate.getLayout(session, tableHandle, constraint, desiredColumns);

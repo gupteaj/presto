@@ -167,7 +167,7 @@ public final class MetadataUtil
         return transactionManager.getOptionalCatalogMetadata(session.getRequiredTransactionId(), catalogName);
     }
 
-    public static Optional<TableHandle> getOptionalTableHandle(Session session, TransactionManager transactionManager, QualifiedObjectName table)
+    public static Optional<TableHandle> getOptionalTableHandle(Session session, TransactionManager transactionManager, QualifiedObjectName table, Optional<Type> timeTravelType, Optional<Object> timeTravelExpression)
     {
         requireNonNull(table, "table is null");
 
@@ -177,7 +177,13 @@ public final class MetadataUtil
             ConnectorId connectorId = catalogMetadata.getConnectorId(session, table);
             ConnectorMetadata metadata = catalogMetadata.getMetadataFor(connectorId);
 
-            ConnectorTableHandle tableHandle = metadata.getTableHandle(session.toConnectorSession(connectorId), toSchemaTableName(table));
+            ConnectorTableHandle tableHandle;
+            if (timeTravelExpression.isPresent()) {
+                tableHandle = metadata.getTableHandle(session.toConnectorSession(connectorId), toSchemaTableName(table), timeTravelType, timeTravelExpression);
+            }
+            else {
+                tableHandle = metadata.getTableHandle(session.toConnectorSession(connectorId), toSchemaTableName(table));
+            }
             if (tableHandle != null) {
                 return Optional.of(new TableHandle(
                         connectorId,

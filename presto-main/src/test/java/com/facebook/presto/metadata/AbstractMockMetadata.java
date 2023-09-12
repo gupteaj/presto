@@ -144,6 +144,12 @@ public abstract class AbstractMockMetadata
     }
 
     @Override
+    public Optional<TableHandle> getTimeTravelHandle(Session session, QualifiedObjectName tableName, Optional<Type> timeTravelType, Optional<Object> timeTravelExpression)
+    {
+        throw new UnsupportedOperationException();
+    }
+
+    @Override
     public Optional<SystemTable> getSystemTable(Session session, QualifiedObjectName tableName)
     {
         throw new UnsupportedOperationException();

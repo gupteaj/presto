@@ -327,6 +327,12 @@ public class MetadataManager
     }
 
     @Override
+    public Optional<TableHandle> getTimeTravelHandle(Session session, QualifiedObjectName tableName, Optional<Type> timeTravelType, Optional<Object> timeTravelExpression)
+    {
+        return getOptionalTableHandle(session, transactionManager, tableName, timeTravelType, timeTravelExpression);
+    }
+
+    @Override
     public Optional<SystemTable> getSystemTable(Session session, QualifiedObjectName tableName)
     {
         requireNonNull(session, "session is null");
@@ -1010,7 +1016,7 @@ public class MetadataManager
 
     private MaterializedViewStatus getMaterializedViewStatus(Session session, QualifiedObjectName materializedViewName, TupleDomain<String> baseQueryDomain)
     {
-        Optional<TableHandle> materializedViewHandle = getOptionalTableHandle(session, transactionManager, materializedViewName);
+        Optional<TableHandle> materializedViewHandle = getOptionalTableHandle(session, transactionManager, materializedViewName, Optional.empty(), Optional.empty());
 
         ConnectorId connectorId = materializedViewHandle.get().getConnectorId();
         ConnectorMetadata metadata = getMetadata(session, connectorId);
@@ -1322,13 +1328,13 @@ public class MetadataManager
             @Override
             public boolean tableExists(QualifiedObjectName tableName)
             {
-                return getOptionalTableHandle(session, transactionManager, tableName).isPresent();
+                return getOptionalTableHandle(session, transactionManager, tableName, Optional.empty(), Optional.empty()).isPresent();
             }
 
             @Override
             public Optional<TableHandle> getTableHandle(QualifiedObjectName tableName)
             {
-                return getOptionalTableHandle(session, transactionManager, tableName);
+                return getOptionalTableHandle(session, transactionManager, tableName, Optional.empty(), Optional.empty());
             }
 
             @Override

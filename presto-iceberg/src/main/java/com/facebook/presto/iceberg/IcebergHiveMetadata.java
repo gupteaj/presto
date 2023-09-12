@@ -15,6 +15,9 @@ package com.facebook.presto.iceberg;
 
 import com.facebook.airlift.json.JsonCodec;
 import com.facebook.presto.common.predicate.TupleDomain;
+import com.facebook.presto.common.type.BigintType;
+import com.facebook.presto.common.type.DateTimeEncoding;
+import com.facebook.presto.common.type.TimestampWithTimeZoneType;
 import com.facebook.presto.common.type.TypeManager;
 import com.facebook.presto.hive.HdfsContext;
 import com.facebook.presto.hive.HdfsEnvironment;
@@ -65,11 +68,13 @@ import static com.facebook.presto.iceberg.IcebergTableProperties.getPartitioning
 import static com.facebook.presto.iceberg.IcebergTableProperties.getTableLocation;
 import static com.facebook.presto.iceberg.IcebergUtil.getColumns;
 import static com.facebook.presto.iceberg.IcebergUtil.getHiveIcebergTable;
+import static com.facebook.presto.iceberg.IcebergUtil.getSnapshotIdAsOfTime;
 import static com.facebook.presto.iceberg.IcebergUtil.getTableComment;
 import static com.facebook.presto.iceberg.IcebergUtil.isIcebergTable;
 import static com.facebook.presto.iceberg.PartitionFields.parsePartitionFields;
 import static com.facebook.presto.iceberg.TableType.DATA;
 import static com.facebook.presto.iceberg.TypeConverter.toIcebergType;
+import static com.facebook.presto.spi.StandardErrorCode.INVALID_ARGUMENTS;
 import static com.facebook.presto.spi.StandardErrorCode.INVALID_SCHEMA_PROPERTY;
 import static com.facebook.presto.spi.StandardErrorCode.NOT_SUPPORTED;
 import static com.facebook.presto.spi.StandardErrorCode.SCHEMA_NOT_EMPTY;
@@ -114,6 +119,12 @@ public class IcebergHiveMetadata
     @Override
     public IcebergTableHandle getTableHandle(ConnectorSession session, SchemaTableName tableName)
     {
+        return getTableHandle(session, tableName, Optional.empty(), Optional.empty());
+    }
+
+    @Override
+    public IcebergTableHandle getTableHandle(ConnectorSession session, SchemaTableName tableName, Optional<com.facebook.presto.common.type.Type> timeTravelType, Optional<Object> timeTravelExpression)
+    {
         IcebergTableName name = IcebergTableName.from(tableName.getTableName());
         verify(name.getTableType() == DATA, "Wrong table type: " + name.getTableType());
 
@@ -127,7 +138,16 @@ public class IcebergHiveMetadata
         }
 
         org.apache.iceberg.Table table = getHiveIcebergTable(metastore, hdfsEnvironment, session, tableName);
-        Optional<Long> snapshotId = getSnapshotId(table, name.getSnapshotId());
+        Optional<Long> tableSnapshotId;
+
+        if (timeTravelExpression.isPresent()) {
+            long timeTravelSnapshotId = getSnapshotIdForTimeTravel(table, timeTravelType.get(), timeTravelExpression.get());
+            tableSnapshotId = Optional.of(timeTravelSnapshotId);
+        }
+        else {
+            tableSnapshotId = getSnapshotId(table, name.getSnapshotId());
+        }
+        Optional<Long> snapshotId = getSnapshotId(table, tableSnapshotId);
 
         return new IcebergTableHandle(
                 tableName.getSchemaName(),
@@ -135,6 +155,22 @@ public class IcebergHiveMetadata
                 name.getTableType(),
                 snapshotId,
                 TupleDomain.all());
+    }
+
+    private static long getSnapshotIdForTimeTravel(org.apache.iceberg.Table table, com.facebook.presto.common.type.Type timeTravelType, Object timeTravelExpression)
+    {
+        if (timeTravelType instanceof BigintType) {
+            long snapshotId = (long) timeTravelExpression;
+            if (table.snapshot(snapshotId) == null) {
+                throw new PrestoException(INVALID_ARGUMENTS, "Iceberg snapshot ID does not exists: " + snapshotId);
+            }
+            return snapshotId;
+        }
+        if (timeTravelType instanceof TimestampWithTimeZoneType) {
+            long millisUtc = DateTimeEncoding.unpackMillisUtc((long) timeTravelExpression);
+            return getSnapshotIdAsOfTime(table, millisUtc);
+        }
+        throw new PrestoException(NOT_SUPPORTED, "Unsupported time travel expression type: " + timeTravelType);
     }
 
     @Override
