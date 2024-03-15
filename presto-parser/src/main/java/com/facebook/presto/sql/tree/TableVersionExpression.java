@@ -30,47 +30,56 @@ public class TableVersionExpression
         VERSION
     }
 
+    public enum TableVersionMode
+    {
+        ASOF,
+        BEFORE
+    }
+
     private final Expression asOfExpression;
     private final TableVersionType type;
+    private final TableVersionMode mode;
 
-    public TableVersionExpression(TableVersionType type, Expression value)
+    public TableVersionExpression(TableVersionType type, TableVersionMode mode, Expression value)
     {
-        this(Optional.empty(), type, value);
+        this(Optional.empty(), type, mode, value);
     }
 
-    public TableVersionExpression(NodeLocation location, TableVersionType type, Expression value)
+    public TableVersionExpression(NodeLocation location, TableVersionType type, TableVersionMode mode, Expression value)
     {
-        this(Optional.of(location), type, value);
+        this(Optional.of(location), type, mode, value);
     }
 
-    private TableVersionExpression(Optional<NodeLocation> location, TableVersionType type, Expression value)
+    private TableVersionExpression(Optional<NodeLocation> location, TableVersionType type, TableVersionMode mode, Expression value)
     {
         super(location);
         requireNonNull(value, "value is null");
         requireNonNull(type, "type is null");
+        requireNonNull(mode, "mode is null");
 
         this.asOfExpression = value;
         this.type = type;
+        this.mode = mode;
     }
 
-    public static TableVersionExpression timestampExpression(NodeLocation location, Expression value)
+    public static TableVersionExpression timestampExpression(NodeLocation location, TableVersionMode mode, Expression value)
     {
-        return new TableVersionExpression(Optional.of(location), TableVersionType.TIMESTAMP, value);
+        return new TableVersionExpression(Optional.of(location), TableVersionType.TIMESTAMP, mode, value);
     }
 
-    public static TableVersionExpression versionExpression(NodeLocation location, Expression value)
+    public static TableVersionExpression versionExpression(NodeLocation location, TableVersionMode mode, Expression value)
     {
-        return new TableVersionExpression(Optional.of(location), TableVersionType.VERSION, value);
+        return new TableVersionExpression(Optional.of(location), TableVersionType.VERSION, mode, value);
     }
 
-    public static TableVersionExpression timestampExpression(Expression value)
+    public static TableVersionExpression timestampExpression(TableVersionMode mode, Expression value)
     {
-        return new TableVersionExpression(Optional.empty(), TableVersionType.TIMESTAMP, value);
+        return new TableVersionExpression(Optional.empty(), TableVersionType.TIMESTAMP, mode, value);
     }
 
-    public static TableVersionExpression versionExpression(Expression value)
+    public static TableVersionExpression versionExpression(TableVersionMode mode, Expression value)
     {
-        return new TableVersionExpression(Optional.empty(), TableVersionType.VERSION, value);
+        return new TableVersionExpression(Optional.empty(), TableVersionType.VERSION, mode, value);
     }
 
     public Expression getAsOfExpression()
@@ -82,7 +91,10 @@ public class TableVersionExpression
     {
         return type;
     }
-
+    public TableVersionMode getTableVersionMode()
+    {
+        return mode;
+    }
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context)
     {

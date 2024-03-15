@@ -238,5 +238,10 @@ public class TestIcebergTableVersion
         assertQueryFails("SELECT desc FROM " + tableName2 + " FOR TIMESTAMP AS OF CAST ('2023-01-01' AS DATE)", ".* Type date is invalid. Supported table version AS OF expression type is Timestamp with Time Zone.");
         assertQueryFails("SELECT desc FROM " + tableName2 + " FOR TIMESTAMP AS OF CURRENT_DATE", ".* Type date is invalid. Supported table version AS OF expression type is Timestamp with Time Zone.");
         assertQueryFails("SELECT desc FROM " + tableName2 + " FOR TIMESTAMP AS OF TIMESTAMP '2023-01-01 00:00:00.000'", ".* Type timestamp is invalid. Supported table version AS OF expression type is Timestamp with Time Zone.");
+
+        assertQueryFails("SELECT desc FROM " + tableName1 + " FOR VERSION BEFORE " + tab1VersionId1 + " ORDER BY 1", "Table version BEFORE expression is not supported for .*");
+        assertQueryFails("SELECT desc FROM " + tableName1 + " FOR SYSTEM_VERSION BEFORE " + tab1VersionId1 + " ORDER BY 1", "Table version BEFORE expression is not supported for .*");
+        assertQueryFails("SELECT desc FROM " + tableName1 + " FOR TIMESTAMP BEFORE TIMESTAMP " + "'" + tab1Timestamp1 + "'" + " ORDER BY 1", "Table version BEFORE expression is not supported for .*");
+        assertQueryFails("SELECT desc FROM " + tableName1 + " FOR SYSTEM_TIME BEFORE TIMESTAMP " + "'" + tab1Timestamp1 + "'" + " ORDER BY 1", "Table version BEFORE expression is not supported for .*");
     }
 }

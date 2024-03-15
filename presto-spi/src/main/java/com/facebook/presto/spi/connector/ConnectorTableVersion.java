@@ -24,16 +24,25 @@ public class ConnectorTableVersion
         TIMESTAMP,
         VERSION
     }
+
+    public enum VersionMode
+    {
+        ASOF,
+        BEFORE
+    }
     private final VersionType versionType;
+    private final VersionMode versionMode;
     private final Type versionExpressionType;
     private final Object tableVersion;
 
-    public ConnectorTableVersion(VersionType versionType, Type versionExpressionType, Object tableVersion)
+    public ConnectorTableVersion(VersionType versionType, VersionMode versionMode, Type versionExpressionType, Object tableVersion)
     {
         requireNonNull(versionType, "versionType is null");
+        requireNonNull(versionMode, "versionMode is null");
         requireNonNull(versionExpressionType, "versionExpressionType is null");
         requireNonNull(tableVersion, "tableVersion is null");
         this.versionType = versionType;
+        this.versionMode = versionMode;
         this.versionExpressionType = versionExpressionType;
         this.tableVersion = tableVersion;
     }

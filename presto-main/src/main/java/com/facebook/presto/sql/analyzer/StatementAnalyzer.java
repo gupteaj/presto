@@ -207,6 +207,7 @@ import static com.facebook.presto.spi.StandardWarningCode.REDUNDANT_ORDER_BY;
 import static com.facebook.presto.spi.analyzer.AccessControlRole.TABLE_CREATE;
 import static com.facebook.presto.spi.analyzer.AccessControlRole.TABLE_DELETE;
 import static com.facebook.presto.spi.analyzer.AccessControlRole.TABLE_INSERT;
+import static com.facebook.presto.spi.connector.ConnectorTableVersion.VersionMode;
 import static com.facebook.presto.spi.connector.ConnectorTableVersion.VersionType;
 import static com.facebook.presto.spi.function.FunctionKind.AGGREGATE;
 import static com.facebook.presto.spi.function.FunctionKind.WINDOW;
@@ -277,6 +278,9 @@ import static com.facebook.presto.sql.tree.FrameBound.Type.FOLLOWING;
 import static com.facebook.presto.sql.tree.FrameBound.Type.PRECEDING;
 import static com.facebook.presto.sql.tree.FrameBound.Type.UNBOUNDED_FOLLOWING;
 import static com.facebook.presto.sql.tree.FrameBound.Type.UNBOUNDED_PRECEDING;
+import static com.facebook.presto.sql.tree.TableVersionExpression.TableVersionMode;
+import static com.facebook.presto.sql.tree.TableVersionExpression.TableVersionMode.ASOF;
+import static com.facebook.presto.sql.tree.TableVersionExpression.TableVersionMode.BEFORE;
 import static com.facebook.presto.sql.tree.TableVersionExpression.TableVersionType;
 import static com.facebook.presto.sql.tree.TableVersionExpression.TableVersionType.TIMESTAMP;
 import static com.facebook.presto.sql.tree.TableVersionExpression.TableVersionType.VERSION;
@@ -1356,6 +1360,16 @@ class StatementAnalyzer
                 return tableColumnsMetadata.getTableHandle();
             }
         }
+        private VersionMode toVersionMode(TableVersionMode mode)
+        {
+            switch (mode) {
+                case ASOF:
+                    return VersionMode.ASOF;
+                case BEFORE:
+                    return VersionMode.BEFORE;
+            }
+            throw new SemanticException(NOT_SUPPORTED, mode.toString(), "Table version mode not supported.");
+        }
 
         private VersionType toVersionType(TableVersionType type)
         {
@@ -1371,9 +1385,13 @@ class StatementAnalyzer
         {
             Expression asOfExpr = table.getTableVersionExpression().get().getAsOfExpression();
             TableVersionType tableVersionType = table.getTableVersionExpression().get().getTableVersionType();
+            TableVersionMode tableVersionMode = table.getTableVersionExpression().get().getTableVersionMode();
             ExpressionAnalysis expressionAnalysis = analyzeExpression(asOfExpr, scope.get());
             analysis.recordSubqueries(table, expressionAnalysis);
             Type asOfExprType = expressionAnalysis.getType(asOfExpr);
+            if (tableVersionMode == BEFORE) {
+                throw new PrestoException(INVALID_ARGUMENTS, format("Table version BEFORE expression is not supported for %s", name.toString()));
+            }
             if (asOfExprType == UNKNOWN) {
                 throw new PrestoException(INVALID_ARGUMENTS, format("Table version AS OF expression cannot be NULL for %s", name.toString()));
             }
@@ -1393,7 +1411,7 @@ class StatementAnalyzer
                 }
             }
 
-            ConnectorTableVersion tableVersion = new ConnectorTableVersion(toVersionType(tableVersionType), asOfExprType, evalAsOfExpr);
+            ConnectorTableVersion tableVersion = new ConnectorTableVersion(toVersionType(tableVersionType), toVersionMode(tableVersionMode), asOfExprType, evalAsOfExpr);
             return metadata.getHandleVersion(session, name, Optional.of(tableVersion));
         }
 
