@@ -2106,12 +2106,6 @@ class AstBuilder
     // ***************** helpers *****************
 
     @Override
-    protected Node defaultResult()
-    {
-        return null;
-    }
-
-    @Override
     protected Node aggregateResult(Node aggregate, Node nextResult)
     {
         if (nextResult == null) {
