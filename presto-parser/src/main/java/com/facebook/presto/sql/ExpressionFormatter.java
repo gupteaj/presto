@@ -693,7 +693,7 @@ public final class ExpressionFormatter
 
         protected String visitTableVersion(TableVersionExpression node, Void context)
         {
-            return "FOR " + node.getTableVersionType().name() + " AS OF " + process(node.getAsOfExpression(), context) + " ";
+            return "FOR " + node.getTableVersionType().name() + " AS OF " + process(node.getStateExpression(), context) + " ";
         }
     }
 
